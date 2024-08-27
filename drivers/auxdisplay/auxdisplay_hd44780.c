@@ -77,42 +77,34 @@ struct auxdisplay_hd44780_config {
 static void auxdisplay_hd44780_set_entry_mode(const struct device *dev);
 static void auxdisplay_hd44780_set_display_mode(const struct device *dev, bool enabled);
 
-static void auxdisplay_hd44780_command(const struct device *dev, bool rs, uint8_t cmd,
-				       uint8_t mode)
+static void hd44780_launch_command(const struct device *dev)
 {
-	const struct auxdisplay_hd44780_config *config = dev->config;
-	int8_t i = 7;
-
-	if (mode == AUXDISPLAY_HD44780_MODE_8_BIT) {
-		while (i >= 0) {
-			gpio_pin_set_dt(&config->db_gpios[i], ((cmd & BIT(i)) ? 1 : 0));
-			--i;
-		}
-	} else {
-		while (i >= 4) {
-			gpio_pin_set_dt(&config->db_gpios[i], ((cmd & BIT(i)) ? 1 : 0));
-			--i;
-		}
-	}
-
-	gpio_pin_set_dt(&config->rs_gpio, rs);
+	const struct auxdisplay_hd44780_config *const config = dev->config;
 
 	gpio_pin_set_dt(&config->e_gpio, 1);
 	k_sleep(K_USEC(config->enable_line_rise_delay));
 	gpio_pin_set_dt(&config->e_gpio, 0);
 	k_sleep(K_USEC(config->enable_line_fall_delay));
+}
 
-	if (mode == AUXDISPLAY_HD44780_MODE_4_BIT) {
-		while (i >= 0) {
-			gpio_pin_set_dt(&config->db_gpios[(i + 4)], ((cmd & BIT(i)) ? 1 : 0));
+static void auxdisplay_hd44780_command(const struct device *dev, bool rs, uint8_t cmd,
+				       uint8_t mode)
+{
+	const struct auxdisplay_hd44780_config *config = dev->config;
+	int8_t i = 7;
+	const int lsb_line = (mode == AUXDISPLAY_HD44780_MODE_8_BIT) ? 0 : 4;
+	const bool launch_once = (mode == AUXDISPLAY_HD44780_MODE_4_BIT) ? false : true;
+
+	gpio_pin_set_dt(&config->rs_gpio, rs);
+
+	do {
+		for (int line = 7; line >= lsb_line && i > -1; --line) {
+			gpio_pin_set_dt(&config->db_gpios[line], ((cmd & BIT(i)) ? 1 : 0));
 			--i;
 		}
 
-		gpio_pin_set_dt(&config->e_gpio, 1);
-		k_sleep(K_USEC(config->enable_line_rise_delay));
-		gpio_pin_set_dt(&config->e_gpio, 0);
-		k_sleep(K_USEC(config->enable_line_fall_delay));
-	}
+		hd44780_launch_command(dev);
+	} while (!launch_once);
 }
 
 static int auxdisplay_hd44780_init(const struct device *dev)
