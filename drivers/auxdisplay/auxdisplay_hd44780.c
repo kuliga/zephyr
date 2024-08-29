@@ -93,18 +93,18 @@ static void auxdisplay_hd44780_command(const struct device *dev, bool rs, uint8_
 	const struct auxdisplay_hd44780_config *config = dev->config;
 	int8_t i = 7;
 	const int lsb_line = (mode == AUXDISPLAY_HD44780_MODE_8_BIT) ? 0 : 4;
-	const bool launch_once = (mode == AUXDISPLAY_HD44780_MODE_4_BIT) ? false : true;
+	int ncommands = (mode == AUXDISPLAY_HD44780_MODE_4_BIT) ? 2 : 1;
 
 	gpio_pin_set_dt(&config->rs_gpio, rs);
 
-	do {
-		for (int line = 7; line >= lsb_line && i > -1; --line) {
+	while (ncommands--) {
+		for (int line = 7; line >= lsb_line; --line) {
 			gpio_pin_set_dt(&config->db_gpios[line], ((cmd & BIT(i)) ? 1 : 0));
 			--i;
 		}
 
 		hd44780_launch_command(dev);
-	} while (!launch_once);
+	}
 }
 
 static int auxdisplay_hd44780_init(const struct device *dev)
