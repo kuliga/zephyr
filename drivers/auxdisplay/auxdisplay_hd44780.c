@@ -105,7 +105,6 @@ static bool hd44780_is_busy(const struct device *dev)
 	const struct auxdisplay_hd44780_config *const config  = dev->config;
 	bool busy;
 
-	hd44780_set_rs_rw_lines(dev, 0, 1);
 	hd44780_pulse_enable_line(dev);
 
 	/* We don't care about the other pins. */
@@ -119,23 +118,6 @@ static bool hd44780_is_busy(const struct device *dev)
 	return busy;
 }
 
-static inline void hd44780_launch_command(const struct device *dev, uint8_t cmd)
-{
-	const struct auxdisplay_hd44780_config *const config = dev->config;
-
-	if (config->rw_gpio.port) {
-		while (hd44780_is_busy(dev));
-	}
-
-	hd44780_pulse_enable_line(dev);
-
-	if (!config->rw_gpio.port) {
-		/* sleep for a max execution time for a given instruction */
-		uint16_t cmd_delay_us = (cmd == AUXDISPLAY_HD44780_CMD_CLEAR) ? 1520 : 37;
-		k_sleep(K_USEC(cmd_delay_us));
-	}
-}
-
 static void auxdisplay_hd44780_command(const struct device *dev, bool rs,
 				       uint8_t cmd, uint8_t mode)
 {
@@ -144,15 +126,25 @@ static void auxdisplay_hd44780_command(const struct device *dev, bool rs,
 	const int lsb_line = (mode == AUXDISPLAY_HD44780_MODE_8_BIT) ? 0 : 4;
 	int ncommands = (mode == AUXDISPLAY_HD44780_MODE_4_BIT) ? 2 : 1;
 
-	hd44780_set_rs_rw_lines(dev, rs, 0);
+	if (config->rw_gpio.port) {
+		hd44780_set_rs_rw_lines(dev, 0, 1);
+		while (hd44780_is_busy(dev));
+	}
 
+	hd44780_set_rs_rw_lines(dev, rs, 0);
 	while (ncommands--) {
 		for (int line = 7; line >= lsb_line; --line) {
 			gpio_pin_set_dt(&config->db_gpios[line], ((cmd & BIT(i)) ? 1 : 0));
 			--i;
 		}
 
-		hd44780_launch_command(dev, cmd);
+		hd44780_pulse_enable_line(dev);
+	}
+
+	if (!config->rw_gpio.port) {
+		/* Sleep for a max execution time for a given instruction. */
+		uint16_t cmd_delay_us = (cmd == AUXDISPLAY_HD44780_CMD_CLEAR) ? 1520 : 37;
+		k_sleep(K_USEC(cmd_delay_us));
 	}
 }
 
