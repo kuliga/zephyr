@@ -163,7 +163,6 @@ static int auxdisplay_hd44780_init(const struct device *dev)
 	int rc;
 	uint8_t i = 0;
 	uint8_t cmd = AUXDISPLAY_HD44780_CMD_SETUP | AUXDISPLAY_HD44780_8_BIT_CONFIG;
-	gpio_flags_t db_gpios_flags = GPIO_OUTPUT;
 
 	if (config->capabilities.mode > AUXDISPLAY_HD44780_MODE_8_BIT) {
 		/* This index is reserved for internal driver usage */
@@ -179,18 +178,6 @@ static int auxdisplay_hd44780_init(const struct device *dev)
 		return rc;
 	}
 
-	if (config->rw_gpio.port) {
-		rc = gpio_pin_configure_dt(&config->rw_gpio, GPIO_OUTPUT);
-
-		if (rc < 0) {
-			LOG_ERR("Configuration of RW GPIO failed: %d", rc);
-			return rc;
-		}
-
-		gpio_pin_set_dt(&config->rw_gpio, 0);
-		db_gpios_flags |= GPIO_INPUT;
-	}
-
 	rc = gpio_pin_configure_dt(&config->e_gpio, GPIO_OUTPUT);
 
 	if (rc < 0) {
@@ -204,7 +191,7 @@ static int auxdisplay_hd44780_init(const struct device *dev)
 
 	while (i < 8) {
 		if (config->db_gpios[i].port) {
-			rc = gpio_pin_configure_dt(&config->db_gpios[i], db_gpios_flags);
+			rc = gpio_pin_configure_dt(&config->db_gpios[i], GPIO_OUTPUT);
 
 			if (rc < 0) {
 				LOG_ERR("Configuration of DB%d GPIO failed: %d", i, rc);
@@ -221,6 +208,28 @@ static int auxdisplay_hd44780_init(const struct device *dev)
 		}
 
 		++i;
+	}
+
+	if (config->rw_gpio.port) {
+		rc = gpio_pin_configure_dt(&config->rw_gpio, GPIO_OUTPUT);
+
+		if (rc < 0) {
+			LOG_ERR("Configuration of RW GPIO failed: %d", rc);
+			return rc;
+		}
+
+		/*
+		 * Configure the db_gpios[7] pin also as an input,
+		 * as we're going to read the busy flag with it.
+		 *
+		 * At this point we're sure this  pin exist,
+		 * so we don't need to check it once again.
+		 */
+		rc = gpio_pin_configure_dt(&config->db_gpios[i], GPIO_INPUT | GPIO_OUTPUT);
+		if (rc < 0) {
+			LOG_ERR("Configuration of DB7 GPIO failed: %d", rc);
+			return rc;
+		}
 	}
 
 	if (config->backlight_gpio.port) {
