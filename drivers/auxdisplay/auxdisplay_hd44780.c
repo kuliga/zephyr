@@ -100,24 +100,6 @@ static inline void hd44780_set_rs_rw_lines(const struct device *dev, bool rs, bo
 	k_sleep(K_NSEC(config->rs_line_delay));
 }
 
-static bool hd44780_is_busy(const struct device *dev)
-{
-	const struct auxdisplay_hd44780_config *const config  = dev->config;
-	bool busy;
-
-	hd44780_pulse_enable_line(dev);
-
-	/* We don't care about the other pins. */
-	busy = gpio_pin_get_dt(&config->db_gpios[7]);
-
-	if (config->capabilities.mode == AUXDISPLAY_HD44780_MODE_4_BIT) {
-		/* In this mode we have to initiate two separate readbacks. */
-		hd44780_pulse_enable_line(dev);
-	}
-
-	return busy;
-}
-
 static void auxdisplay_hd44780_command(const struct device *dev, bool rs,
 				       uint8_t cmd, uint8_t mode)
 {
@@ -127,8 +109,20 @@ static void auxdisplay_hd44780_command(const struct device *dev, bool rs,
 	int ncommands = (mode == AUXDISPLAY_HD44780_MODE_4_BIT) ? 2 : 1;
 
 	if (config->rw_gpio.port) {
+		bool busy;
+
 		hd44780_set_rs_rw_lines(dev, 0, 1);
-		while (hd44780_is_busy(dev));
+		do {
+			hd44780_pulse_enable_line(dev);
+
+			/* We don't care about the other pins. */
+			busy = gpio_pin_get_dt(&config->db_gpios[7]);
+
+			if (config->capabilities.mode == AUXDISPLAY_HD44780_MODE_4_BIT) {
+				/* In this mode we have to initiate two separate readbacks. */
+				hd44780_pulse_enable_line(dev);
+			}
+		} while (busy);
 	}
 
 	hd44780_set_rs_rw_lines(dev, rs, 0);
@@ -218,6 +212,7 @@ static int auxdisplay_hd44780_init(const struct device *dev)
 		 * so we don't need to check it once again.
 		 */
 		rc = gpio_pin_configure_dt(&config->db_gpios[i], GPIO_INPUT | GPIO_OUTPUT);
+
 		if (rc < 0) {
 			LOG_ERR("Configuration of DB7 GPIO failed: %d", rc);
 			return rc;
