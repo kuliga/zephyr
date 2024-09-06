@@ -74,7 +74,8 @@ struct auxdisplay_hd44780_config {
 	uint16_t clear_delay;
 	uint16_t boot_delay;
 };
-static int flag = 0;
+/* just for busy flag testing */
+static int init_flag = 0;
 
 static void auxdisplay_hd44780_set_entry_mode(const struct device *dev);
 static void auxdisplay_hd44780_set_display_mode(const struct device *dev, bool enabled);
@@ -108,8 +109,8 @@ static void auxdisplay_hd44780_command(const struct device *dev, bool rs,
 	int8_t i = 7;
 	const int lsb_line = (mode == AUXDISPLAY_HD44780_MODE_8_BIT) ? 0 : 4;
 	int ncommands = (mode == AUXDISPLAY_HD44780_MODE_4_BIT) ? 2 : 1;
-
-	if (config->rw_gpio.port) {
+	/* busy flag can only be read AFTER the initialization */
+	if (config->rw_gpio.port && init_flag) {
 		bool busy;
 
 		hd44780_set_rs_rw_lines(dev, 0, 1);
@@ -120,14 +121,11 @@ static void auxdisplay_hd44780_command(const struct device *dev, bool rs,
 			/* We don't care about the other pins. */
 			busy = gpio_pin_get_dt(&config->db_gpios[7]);
 
-			if (config->capabilities.mode == AUXDISPLAY_HD44780_MODE_4_BIT && flag) {
+			if (config->capabilities.mode == AUXDISPLAY_HD44780_MODE_4_BIT) {
 				/* In this mode we have to initiate two separate readbacks. */
 				hd44780_pulse_enable_line(dev);
 			}
 			LOG_ERR("BUSY: %d", busy);
-			if (!flag) {
-				busy = 0;
-			}
 		} while (busy);
 		(void) gpio_pin_configure_dt(&config->db_gpios[7], GPIO_OUTPUT);
 	}
@@ -142,7 +140,7 @@ static void auxdisplay_hd44780_command(const struct device *dev, bool rs,
 		hd44780_pulse_enable_line(dev);
 	}
 
-	if (!flag) {
+	if (!config->rw_gpio.port || !init_flag) {
 		/* Sleep for a max execution time for a given instruction. */
 		uint16_t cmd_delay_us = 15000;//(cmd == AUXDISPLAY_HD44780_CMD_CLEAR) ? 1520 : 37;
 		k_sleep(K_USEC(cmd_delay_us));
@@ -252,7 +250,7 @@ static int auxdisplay_hd44780_init(const struct device *dev)
 		/* Put display into 4-bit mode */
 		cmd = 0b00100000;
 		auxdisplay_hd44780_command(dev, false, cmd, AUXDISPLAY_HD44780_MODE_4_BIT_ONCE);
-		cmd = AUXDISPLAY_HD44780_CMD_SETUP;
+		init_flag = 1;
 		LOG_ERR("BUSY FLAG CAN BE READ____________________________");
 	}
 
@@ -267,7 +265,6 @@ static int auxdisplay_hd44780_init(const struct device *dev)
 	auxdisplay_hd44780_command(dev, false, 0b00000111, config->capabilities.mode);
 	/* END OF 2nd part of INIT PROCEDURE */
 
-	flag = 0;
 	if (config->capabilities.rows > 1) {
 		cmd |= AUXDISPLAY_HD44780_2_LINE_CONFIG;
 	}
