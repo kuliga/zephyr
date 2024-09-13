@@ -165,7 +165,7 @@ static void auxdisplay_hd44780_command(const struct device *dev, bool rs,
 static void hd44780_phy_initialize(const struct device *dev)
 {
 	const struct auxdisplay_hd44780_config *config = dev->config;
-	uint8_t cmd = 0b00110000;
+	uint8_t cmd;
 
 	/*
 	 * If proper power supply is used to power the hd44780, it initializes correctly
@@ -176,6 +176,7 @@ static void hd44780_phy_initialize(const struct device *dev)
 	 * Since we cannot determine it properly in the runtime,
 	 * always carry out the initialization procedure.
 	 */
+	cmd = 0b00110000;
 	auxdisplay_hd44780_command(dev, false, cmd, AUXDISPLAY_HD44780_MODE_4_BIT_ONCE);
 	k_sleep(K_USEC(4100));
 	auxdisplay_hd44780_command(dev, false, cmd, AUXDISPLAY_HD44780_MODE_4_BIT_ONCE);
@@ -185,8 +186,7 @@ static void hd44780_phy_initialize(const struct device *dev)
 
 	if (config->capabilities.mode == AUXDISPLAY_HD44780_MODE_4_BIT) {
 		/* Put display into 4-bit mode */
-		cmd = 0b00100000;
-		auxdisplay_hd44780_command(dev, false, cmd, AUXDISPLAY_HD44780_MODE_4_BIT_ONCE);
+		auxdisplay_hd44780_command(dev, false, 0b00100000, AUXDISPLAY_HD44780_MODE_4_BIT_ONCE);
 	}
 
 	/* function set */
