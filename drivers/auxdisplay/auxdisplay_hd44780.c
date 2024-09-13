@@ -102,15 +102,15 @@ static inline void hd44780_set_rs_rw_lines(const struct device *dev, bool rs, bo
 	k_sleep(K_NSEC(config->rs_line_delay));
 }
 
-static void auxdisplay_hd44780_command(const struct device *dev, bool rs,
-				       uint8_t cmd, uint8_t mode)
+static void hd44780_command(const struct device *dev, bool rs, uint8_t cmd,
+			    uint8_t mode, bool check_busy_flag)
 {
 	const struct auxdisplay_hd44780_config *config = dev->config;
 	int8_t i = 7;
 	const int lsb_line = (mode == AUXDISPLAY_HD44780_MODE_8_BIT) ? 0 : 4;
 	int ncommands = (mode == AUXDISPLAY_HD44780_MODE_4_BIT) ? 2 : 1;
-	/* busy flag can only be read AFTER the initialization */
-	if (config->rw_gpio.port && init_flag) {
+
+	if (check_busy_flag) {
 		bool busy;
 
 		hd44780_set_rs_rw_lines(dev, 0, 1);
@@ -145,11 +145,22 @@ static void auxdisplay_hd44780_command(const struct device *dev, bool rs,
 		hd44780_pulse_enable_line(dev);
 	}
 
-	if (!config->rw_gpio.port || !init_flag) {
+	if (!check_busy_flag) {
 		/* Sleep for a max execution time for a given instruction. */
 		uint16_t cmd_delay_us = (cmd == AUXDISPLAY_HD44780_CMD_CLEAR) ? 1520 : 37;
 		k_sleep(K_USEC(cmd_delay_us));
 	}
+}
+
+static inline void auxdisplay_hd44780_command(const struct device *dev, bool rs,
+					      uint8_t cmd, uint8_t mode)
+{
+	const struct auxdisplay_hd44780_config *config = dev->config;
+	/* the first check is prolly` gonna be optimized away (it is a compile-time constant) */
+	bool check_busy_flag = (!config->rw_gpio.port ||
+				mode == AUXDISPLAY_HD44780_MODE_4_BIT_ONCE) ? false : true;
+
+	hd44780_command(dev, rs, cmd, mode, check_busy_flag);
 }
 
 static int auxdisplay_hd44780_init(const struct device *dev)
