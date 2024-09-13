@@ -114,7 +114,10 @@ static void auxdisplay_hd44780_command(const struct device *dev, bool rs,
 		bool busy;
 
 		hd44780_set_rs_rw_lines(dev, 0, 1);
-		(void) gpio_pin_configure_dt(&config->db_gpios[7], GPIO_INPUT | GPIO_PULL_UP);
+		(void) gpio_pin_configure_dt(&config->db_gpios[7], GPIO_INPUT | GPIO_PULL_DOWN);
+		(void) gpio_pin_configure_dt(&config->db_gpios[6], GPIO_INPUT | GPIO_PULL_UP);
+		(void) gpio_pin_configure_dt(&config->db_gpios[5], GPIO_INPUT | GPIO_PULL_UP);
+		(void) gpio_pin_configure_dt(&config->db_gpios[4], GPIO_INPUT | GPIO_PULL_UP);
 		do {
 			hd44780_pulse_enable_line(dev);
 
@@ -125,9 +128,11 @@ static void auxdisplay_hd44780_command(const struct device *dev, bool rs,
 				/* In this mode we have to initiate two separate readbacks. */
 				hd44780_pulse_enable_line(dev);
 			}
-			LOG_ERR("BUSY: %d", busy);
 		} while (busy);
 		(void) gpio_pin_configure_dt(&config->db_gpios[7], GPIO_OUTPUT);
+		(void) gpio_pin_configure_dt(&config->db_gpios[6], GPIO_OUTPUT);
+		(void) gpio_pin_configure_dt(&config->db_gpios[5], GPIO_OUTPUT);
+		(void) gpio_pin_configure_dt(&config->db_gpios[4], GPIO_OUTPUT);
 	}
 
 	hd44780_set_rs_rw_lines(dev, rs, 0);
@@ -142,7 +147,7 @@ static void auxdisplay_hd44780_command(const struct device *dev, bool rs,
 
 	if (!config->rw_gpio.port || !init_flag) {
 		/* Sleep for a max execution time for a given instruction. */
-		uint16_t cmd_delay_us = 15000;//(cmd == AUXDISPLAY_HD44780_CMD_CLEAR) ? 1520 : 37;
+		uint16_t cmd_delay_us = (cmd == AUXDISPLAY_HD44780_CMD_CLEAR) ? 1520 : 37;
 		k_sleep(K_USEC(cmd_delay_us));
 	}
 }
@@ -240,18 +245,17 @@ static int auxdisplay_hd44780_init(const struct device *dev)
 		/* START OF 1st part of INIT PROCEDURE */
 		cmd = 0b00110000;
 		auxdisplay_hd44780_command(dev, false, cmd, AUXDISPLAY_HD44780_MODE_4_BIT_ONCE);
-		k_sleep(K_USEC(41000));
+		k_sleep(K_USEC(4100));
 		auxdisplay_hd44780_command(dev, false, cmd, AUXDISPLAY_HD44780_MODE_4_BIT_ONCE);
-		k_sleep(K_USEC(1000));
+		k_sleep(K_USEC(100));
 		auxdisplay_hd44780_command(dev, false, cmd, AUXDISPLAY_HD44780_MODE_4_BIT_ONCE);
-		k_sleep(K_USEC(1000));
+		k_sleep(K_USEC(100));
 		/* END OF 1st part of INIT PROCEDURE */
 
 		/* Put display into 4-bit mode */
 		cmd = 0b00100000;
 		auxdisplay_hd44780_command(dev, false, cmd, AUXDISPLAY_HD44780_MODE_4_BIT_ONCE);
 		init_flag = 1;
-		LOG_ERR("BUSY FLAG CAN BE READ____________________________");
 	}
 
 	/* START OF 2nd part of INIT PROCEDURE */
@@ -264,6 +268,7 @@ static int auxdisplay_hd44780_init(const struct device *dev)
 	/* entry mode set */
 	auxdisplay_hd44780_command(dev, false, 0b00000111, config->capabilities.mode);
 	/* END OF 2nd part of INIT PROCEDURE */
+	//	init_flag = 1;
 
 	if (config->capabilities.rows > 1) {
 		cmd |= AUXDISPLAY_HD44780_2_LINE_CONFIG;
