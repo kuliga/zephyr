@@ -162,6 +162,43 @@ static void auxdisplay_hd44780_command(const struct device *dev, bool rs,
 	}
 }
 
+static void hd44780_phy_initialize(const struct device *dev)
+{
+	const struct auxdisplay_hd44780_config *config = dev->config;
+	uint8_t cmd = 0b00110000;
+
+	/*
+	 * If proper power supply is used to power the hd44780, it initializes correctly
+	 * on a reset condition all by itself. However, if the power supply is below
+	 * its expectations (e.g. supplying it with some 3.3V Nucleo board),
+	 * it won't initialize properly on its own, and the MCU has to carry out
+	 * the initialization as listed in the reference manual.
+	 * Since we cannot determine it properly in the runtime,
+	 * always carry out the initialization procedure.
+	 */
+	auxdisplay_hd44780_command(dev, false, cmd, AUXDISPLAY_HD44780_MODE_4_BIT_ONCE);
+	k_sleep(K_USEC(4100));
+	auxdisplay_hd44780_command(dev, false, cmd, AUXDISPLAY_HD44780_MODE_4_BIT_ONCE);
+	k_sleep(K_USEC(100));
+	auxdisplay_hd44780_command(dev, false, cmd, AUXDISPLAY_HD44780_MODE_4_BIT_ONCE);
+	k_sleep(K_USEC(100));
+
+	if (config->capabilities.mode == AUXDISPLAY_HD44780_MODE_4_BIT) {
+		/* Put display into 4-bit mode */
+		cmd = 0b00100000;
+		auxdisplay_hd44780_command(dev, false, cmd, AUXDISPLAY_HD44780_MODE_4_BIT_ONCE);
+	}
+
+	/* function set */
+	auxdisplay_hd44780_command(dev, false, 0b00101000, config->capabilities.mode);
+	/* display off */
+	auxdisplay_hd44780_command(dev, false, 0b00001000, config->capabilities.mode);
+	/* display clear */
+	auxdisplay_hd44780_command(dev, false, 0b00000001, config->capabilities.mode);
+	/* entry mode set */
+	auxdisplay_hd44780_command(dev, false, 0b00000111, config->capabilities.mode);
+}
+
 static int auxdisplay_hd44780_init(const struct device *dev)
 {
 	const struct auxdisplay_hd44780_config *config = dev->config;
@@ -250,40 +287,7 @@ static int auxdisplay_hd44780_init(const struct device *dev)
 		k_sleep(K_MSEC(config->boot_delay));
 	}
 
-	/*
-	 * If proper power supply is used to power the hd44780, it initializes correctly
-	 * on a reset condition all by itself. However, if the power supply is below
-	 * its expectations (e.g. supplying it with some 3.3V Nucleo board),
-	 * it won't initialize properly on its own, and the MCU has to carry out
-	 * the initialization.
-	 * Since we cannot determine it properly in the runtime,
-	 * always carry out the initialization procedure, as listed in the manual.
-	 */
-	cmd = 0b00110000; // turn this value into some kind macro
-	auxdisplay_hd44780_command(dev, false, cmd, AUXDISPLAY_HD44780_MODE_4_BIT_ONCE);
-	k_sleep(K_USEC(4100));
-	auxdisplay_hd44780_command(dev, false, cmd, AUXDISPLAY_HD44780_MODE_4_BIT_ONCE);
-	k_sleep(K_USEC(100));
-	auxdisplay_hd44780_command(dev, false, cmd, AUXDISPLAY_HD44780_MODE_4_BIT_ONCE);
-	k_sleep(K_USEC(100));
-
-	if (config->capabilities.mode == AUXDISPLAY_HD44780_MODE_4_BIT) {
-		/* Put display into 4-bit mode */
-		cmd = 0b00100000;
-		auxdisplay_hd44780_command(dev, false, cmd, AUXDISPLAY_HD44780_MODE_4_BIT_ONCE);
-	}
-
-	/* START OF 2nd part of INIT PROCEDURE */
-	// TODO: turn this magic values into some kind of macros
-	/* function set */
-	auxdisplay_hd44780_command(dev, false, 0b00101000, config->capabilities.mode);
-	/* display off */
-	auxdisplay_hd44780_command(dev, false, 0b00001000, config->capabilities.mode);
-	/* display clear */
-	auxdisplay_hd44780_command(dev, false, 0b00000001, config->capabilities.mode);
-	/* entry mode set */
-	auxdisplay_hd44780_command(dev, false, 0b00000111, config->capabilities.mode);
-	/* END OF 2nd part of INIT PROCEDURE */
+	hd44780_phy_initialize(dev);
 
 	if (config->capabilities.rows > 1) {
 		cmd |= AUXDISPLAY_HD44780_2_LINE_CONFIG;
